@@ -1,0 +1,136 @@
+use uuid
+use valk.time
+
+test "Random ids" {
+    let id = uuid.v4()
+    assert(id.version() == 4)
+    assert(!id.is_nil())
+
+    // 36 characters, lowercase, dashes where they belong
+    let text = id.to_string()
+    assert(text.length == 36)
+    assert(text[8] == '-')
+    assert(text[13] == '-')
+    assert(text[18] == '-')
+    assert(text[23] == '-')
+    assert(text.lower() == text)
+    // the version digit and the variant, as the standard writes them
+    assert(text[14] == '4')
+    let variant = text[19]
+    assert(variant == '8' || variant == '9' || variant == 'a' || variant == 'b')
+
+    // Two ids are not the same one
+    assert(uuid.v4() != uuid.v4())
+
+    // The text reads back as the same id
+    let back = uuid.parse(text) ! { assert(false) return }
+    assert(back == id)
+    assert(back.to_hex() == id.to_hex())
+}
+
+test "Time ordered ids" {
+    let first = uuid.v7()
+    assert(first.version() == 7)
+
+    // The time is in there, close to now
+    let now = time.unix_ms()
+    let made = first.unix_ms()
+    assert(made > 0)
+    assert(made <= now + 1000)
+    assert(made > now - 10000)
+
+    // Ids made one after the other keep their order, even inside one millisecond
+    let ids = Array[uuid.Uuid]{}
+    let i: uint = 0
+    while i++ < 1000 : ids.append(uuid.v7())
+    let ordered = true
+    let n: uint = 1
+    while n < ids.length {
+        let previous = ids.get(n - 1) !? uuid.Uuid.nil()
+        let current = ids.get(n) !? uuid.Uuid.nil()
+        if !(current > previous) : ordered = false
+        n++
+    }
+    assert(ordered)
+
+    // They are all different
+    let seen: Map[bool] = .{}
+    each ids as id : seen.set(id.to_string(), true)
+    assert(seen.length == ids.length)
+
+    // A version 4 id carries no time
+    assert(uuid.v4().unix_ms() == 0)
+}
+
+test "Name based ids" {
+    // The same name in the same namespace is always the same id
+    let first = uuid.v5(uuid.NAMESPACE_URL, "https://valk-lang.dev")
+    let again = uuid.v5(uuid.NAMESPACE_URL, "https://valk-lang.dev")
+    assert(first == again)
+    assert(first.version() == 5)
+
+    // Another name, or another namespace, is another id
+    assert(uuid.v5(uuid.NAMESPACE_URL, "https://example.com") != first)
+    assert(uuid.v5(uuid.NAMESPACE_DNS, "https://valk-lang.dev") != first)
+
+    // The value the standard gives for this example
+    let dns = uuid.v5(uuid.NAMESPACE_DNS, "www.example.com")
+    assert(dns.to_string() == "2ed6657d-e927-568b-95e1-2665a8aea6a2")
+
+    // Version 3 uses MD5, and has its own known value
+    let md5 = uuid.v3(uuid.NAMESPACE_DNS, "www.example.com")
+    assert(md5.version() == 3)
+    assert(md5.to_string() == "5df41881-3aed-3515-88a7-2f4a814cf09e")
+}
+
+test "Reading and writing" {
+    let text = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+    let id = uuid.parse(text) ! { assert(false) return }
+    assert(id.to_string() == text)
+    assert(id.to_hex() == "6ba7b8109dad11d180b400c04fd430c8")
+    assert(id.to_urn() == "urn:uuid:" + text)
+
+    // The forms that are also accepted
+    assert((uuid.parse("6BA7B810-9DAD-11D1-80B4-00C04FD430C8") ! { assert(false) return }) == id)
+    assert((uuid.parse("6ba7b8109dad11d180b400c04fd430c8") ! { assert(false) return }) == id)
+    assert((uuid.parse("urn:uuid:" + text) ! { assert(false) return }) == id)
+    assert((uuid.parse("{" + text + "}") ! { assert(false) return }) == id)
+
+    // And the ones that are not
+    assert(!uuid.is_valid(""))
+    assert(!uuid.is_valid("6ba7b810-9dad-11d1-80b4-00c04fd430"))
+    assert(!uuid.is_valid("6ba7b810-9dad-11d1-80b4-00c04fd430c8-extra"))
+    assert(!uuid.is_valid("zzzzzzzz-9dad-11d1-80b4-00c04fd430c8"))
+    assert(uuid.is_valid(text))
+    uuid.parse("nonsense") ! {
+        assert(error_is(E.code, syntax))
+        assert(E.message.contains("nonsense"))
+    }
+
+    // The nil id
+    let empty = uuid.nil()
+    assert(empty.is_nil())
+    assert(empty.version() == 0)
+    assert(empty.to_string() == "00000000-0000-0000-0000-000000000000")
+    assert((uuid.parse("00000000-0000-0000-0000-000000000000") ! { assert(false) return }).is_nil())
+}
+
+test "Ids as values" {
+    // A struct, so it is copied rather than shared, and compares by its bytes
+    let id = uuid.v4()
+    let copy = id
+    assert(copy == id)
+
+    // Sorting is by the bytes, which for version 7 is the order they were made in
+    let ids = Array[uuid.Uuid]{ uuid.v7(), uuid.v7(), uuid.v7() }
+    let shuffled = Array[uuid.Uuid]{ ids.get(2) !! , ids.get(0) !! , ids.get(1) !! }
+    shuffled.sort()
+    assert((shuffled.get(0) !! ) == (ids.get(0) !! ))
+    assert((shuffled.get(2) !! ) == (ids.get(2) !! ))
+
+    // And they work as map keys
+    let names: HashMap[uuid.Uuid, String] = .{}
+    names.set(id, "ada")
+    assert((names.get(id) !? "") == "ada")
+    assert(!names.has(uuid.v4()))
+}

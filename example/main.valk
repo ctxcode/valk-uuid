@@ -1,0 +1,23 @@
+use uuid
+
+fn main() {
+    // A random id, for when nothing should be readable from it
+    let random = uuid.v4()
+    println("v4: " + random.to_string())
+
+    // A time ordered id, for rows that land next to each other in an index
+    let first = uuid.v7()
+    let second = uuid.v7()
+    println("v7: " + first.to_string())
+    println("made at: " + first.unix_ms() + " ms since the epoch")
+    println("in order: " + (second > first))
+
+    // The same name always gives the same id
+    let derived = uuid.v5(uuid.NAMESPACE_URL, "https://valk-lang.dev")
+    println("v5: " + derived.to_string())
+
+    // Reading one back
+    let parsed = uuid.parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8") ! panic("%{E.message}")
+    println("parsed version: " + parsed.version())
+    println("as urn: " + parsed.to_urn())
+}

@@ -1,0 +1,116 @@
+use valk.crypto
+
+/// The 16 bytes of a UUID.
+///
+/// A struct, so an id costs no allocation: it is passed and stored by value, and compares and
+/// hashes as its bytes, which is what makes it usable as a map key.
+///
+/// ```valk
+/// let id = uuid.v7()
+/// println(id.to_string())     // 019283a1-9c4e-7c3e-8f12-6a0b1d2e3f40
+/// println(id.version())       // 7
+/// ```
++ struct Uuid {
+    /// The bytes, in the order they are written.
+    + bytes: [u8 x 16]
+
+    /// Returns the UUID that is all zeroes, which stands for "no id".
+    + static fn nil() SELF $default {
+        return SELF { bytes: { 0... } }
+    }
+
+    /// Returns whether every byte is zero.
+    + fn is_nil() bool {
+        let i: uint = 0
+        while i < 16 {
+            if this.bytes[i] != 0 : return false
+            i++
+        }
+        return true
+    }
+
+    /// Returns the version digit: 4 for a random id, 7 for a time-ordered one, 5 for a name
+    /// based one, and 0 for the nil id.
+    + fn version() uint {
+        if this.is_nil() : return 0
+        return (this.bytes[6] >> 4).to(uint)
+    }
+
+    /// Returns the id as text: 36 characters, lowercase, with the usual dashes.
+    + fn to_string() String $auto {
+        let out = ByteBuffer.new(36)
+        let i: uint = 0
+        while i < 16 {
+            if i == 4 || i == 6 || i == 8 || i == 10 : out.write_byte('-')
+            let byte = this.bytes[i]
+            out.write_byte(hex_digit(byte >> 4))
+            out.write_byte(hex_digit(byte & 0x0f))
+            i++
+        }
+        return out.to_string()
+    }
+
+    /// Returns the id as 32 hex digits, without the dashes.
+    + fn to_hex() String {
+        return crypto.hex_encode(&this.bytes)
+    }
+
+    /// Returns the id as `urn:uuid:...`.
+    + fn to_urn() String {
+        return "urn:uuid:" + this.to_string()
+    }
+
+    /// Returns the time a version 7 id was made, in milliseconds since the Unix epoch, or 0 for
+    /// an id of another version.
+    + fn unix_ms() uint {
+        if this.version() != 7 : return 0
+        let value: uint = 0
+        let i: uint = 0
+        while i < 6 {
+            value = (value << 8) | this.bytes[i].to(uint)
+            i++
+        }
+        return value
+    }
+
+    /// Returns whether two ids are the same. Backs `==`.
+    + fn equals(other: SELF) bool $eq {
+        let i: uint = 0
+        while i < 16 {
+            if this.bytes[i] != other.bytes[i] : return false
+            i++
+        }
+        return true
+    }
+
+    /// Orders ids by their bytes, which for version 7 is also the order they were made in.
+    + fn lt(other: SELF) bool $lt {
+        return this.compare(other) < 0
+    }
+    /// Orders ids by their bytes.
+    + fn gt(other: SELF) bool $gt {
+        return this.compare(other) > 0
+    }
+    /// Returns -1, 0 or 1, comparing the bytes in order.
+    + fn compare(other: SELF) int {
+        let i: uint = 0
+        while i < 16 {
+            let mine = this.bytes[i]
+            let theirs = other.bytes[i]
+            if mine < theirs : return -1
+            if mine > theirs : return 1
+            i++
+        }
+        return 0
+    }
+
+    /// Hashes the bytes, so an id can be a `HashMap` key.
+    + fn hash() uint $hash {
+        return this.to_hex().hash()
+    }
+}
+
+fn hex_digit(value: u8) u8 {
+    if value < 10 : return '0' + value
+    return 'a' + (value - 10)
+}

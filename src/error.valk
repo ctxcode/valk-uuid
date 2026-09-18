@@ -1,0 +1,6 @@
+/// Thrown when text cannot be read as a UUID.
+///
+/// - `syntax`: not 32 hex digits, with or without the dashes, and not a `urn:uuid:` of one.
++ error Error (syntax) payload {
+    message: String
+}

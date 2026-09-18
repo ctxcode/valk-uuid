@@ -1,0 +1,58 @@
+/// The namespaces the standard defines for `v5` and `v3`.
++ global NAMESPACE_DNS: Uuid (parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8") !? Uuid.nil())
+/// The namespace for URLs.
++ global NAMESPACE_URL: Uuid (parse("6ba7b811-9dad-11d1-80b4-00c04fd430c8") !? Uuid.nil())
+/// The namespace for ISO OIDs.
++ global NAMESPACE_OID: Uuid (parse("6ba7b812-9dad-11d1-80b4-00c04fd430c8") !? Uuid.nil())
+/// The namespace for X.500 names.
++ global NAMESPACE_X500: Uuid (parse("6ba7b814-9dad-11d1-80b4-00c04fd430c8") !? Uuid.nil())
+
+/// Reads text as a UUID.
+///
+/// The usual 36 character form is accepted, and so are the 32 digits without dashes, a
+/// `urn:uuid:` in front, and braces around it. Upper and lower case both work.
+///
+/// Throws `syntax` when the text is not one of those.
+///
+/// ```valk
+/// let id = uuid.parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8") ! panic("%{E.message}")
+/// ```
++ fn parse(text: String) Uuid !Error {
+    let value = text
+    if value.starts_with("urn:uuid:") || value.starts_with("URN:UUID:") {
+        value = value.range(9, value.length - 9)
+    }
+    if value.length > 1 && value[0] == '{' && value[value.length - 1] == '}' {
+        value = value.range(1, value.length - 2)
+    }
+
+    let id = Uuid.nil()
+    let at: uint = 0
+    let i: uint = 0
+    while i < value.length {
+        let ch = value[i++]
+        if ch == '-' : continue
+        if at >= 32 : throw .syntax { message: "'" + text + "' has more than 32 digits" }
+        let high = hex_value(ch) ! throw .syntax { message: "'" + text + "' has a character that is not a hex digit" }
+        if i >= value.length : throw .syntax { message: "'" + text + "' ends in the middle of a byte" }
+        let low_ch = value[i++]
+        let low = hex_value(low_ch) ! throw .syntax { message: "'" + text + "' has a character that is not a hex digit" }
+        id.bytes[at / 2] = (high << 4) | low
+        at += 2
+    }
+    if at != 32 : throw .syntax { message: "'" + text + "' has " + (at / 2) + " bytes instead of 16" }
+    return id
+}
+
+/// Returns whether text reads as a UUID.
++ fn is_valid(text: String) bool {
+    parse(text) ! return false
+    return true
+}
+
+fn hex_value(ch: u8) u8 !Error {
+    if ch >= '0' && ch <= '9' : return ch - '0'
+    if ch >= 'a' && ch <= 'f' : return ch - 'a' + 10
+    if ch >= 'A' && ch <= 'F' : return ch - 'A' + 10
+    throw .syntax { message: "'" + ch.to_ascii_string() + "' is not a hex digit" }
+}

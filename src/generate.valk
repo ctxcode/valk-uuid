@@ -1,0 +1,135 @@
+use valk.crypto
+use valk.time
+
+// A version 7 id carries the time it was made, and ids made in the same millisecond are kept in
+// order by counting up in the twelve bits that follow it. The counter is a global, and globals
+// are per thread, so two threads never share one.
+global last_ms: uint (0)
+global last_counter: uint (0)
+
+/// Returns a random id: version 4, 122 bits from the system's random source.
+///
+/// This is the id to use when nothing should be readable from it.
++ fn v4() Uuid {
+    let bytes = crypto.random_bytes(16)
+    let id = Uuid.nil()
+    let i: uint = 0
+    while i < 16 {
+        id.bytes[i] = bytes[i]
+        i++
+    }
+    return with_version(id, 4)
+}
+
+/// Returns a time-ordered id: version 7, the millisecond it was made followed by random bits.
+///
+/// Two ids made in the same millisecond on one thread still come out in order, which is what
+/// makes these good primary keys: rows land next to each other in the index instead of all over
+/// it, the way version 4 ids do.
++ fn v7() Uuid {
+    let now = time.unix_ms()
+    let counter: uint = 0
+    if now == last_ms {
+        counter = last_counter + 1
+        // Twelve bits; a millisecond that runs out of them borrows the next one
+        if counter > 0xfff {
+            now++
+            last_ms = now
+            counter = 0
+        }
+    } else if now < last_ms {
+        // The clock went backwards: keep the order rather than the time
+        now = last_ms
+        counter = last_counter + 1
+    } else {
+        last_ms = now
+        counter = 0
+    }
+    last_ms = now
+    last_counter = counter
+
+    let id = Uuid.nil()
+    // 48 bits of milliseconds
+    let shift: uint = 40
+    let i: uint = 0
+    while i < 6 {
+        id.bytes[i] = ((now >> shift) & 0xff).to(u8)
+        shift -= 8
+        i++
+    }
+    // 12 bits of counter, then 62 bits of randomness
+    id.bytes[6] = ((counter >> 8) & 0x0f).to(u8)
+    id.bytes[7] = (counter & 0xff).to(u8)
+    let random = crypto.random_bytes(8)
+    i = 8
+    while i < 16 {
+        id.bytes[i] = random[i - 8]
+        i++
+    }
+    return with_version(id, 7)
+}
+
+/// Returns the id a name has inside a namespace: version 5, the SHA-1 of the two.
+///
+/// The same namespace and name always give the same id, on every machine, which is what makes
+/// it useful for ids that have to be derived rather than stored.
+///
+/// ```valk
+/// let id = uuid.v5(uuid.NAMESPACE_URL, "https://valk-lang.dev")
+/// ```
++ fn v5(namespace: Uuid, name: String) Uuid {
+    let hasher = crypto.hasher(crypto.HashAlgorithm.sha1)
+    hasher.update(&namespace.bytes)
+    hasher.update(name)
+    let digest: [u8 x 20] = @undefined
+    hasher.finish(&digest)
+
+    let id = Uuid.nil()
+    let i: uint = 0
+    while i < 16 {
+        id.bytes[i] = digest[i]
+        i++
+    }
+    return with_version(id, 5)
+}
+
+/// Returns the id a name has inside a namespace, using MD5: version 3.
+///
+/// `v5` is the one to use; this is here for ids that were made that way before.
++ fn v3(namespace: Uuid, name: String) Uuid {
+    let hasher = crypto.hasher(crypto.HashAlgorithm.md5)
+    hasher.update(&namespace.bytes)
+    hasher.update(name)
+    let digest: [u8 x 16] = @undefined
+    hasher.finish(&digest)
+
+    let id = Uuid.nil()
+    let i: uint = 0
+    while i < 16 {
+        id.bytes[i] = digest[i]
+        i++
+    }
+    return with_version(id, 3)
+}
+
+/// The id that is all zeroes.
++ fn nil() Uuid {
+    return Uuid.nil()
+}
+
+/// Returns a random id as text, for the many places that only want the string.
++ fn v4_string() String {
+    return v4().to_string()
+}
+/// Returns a time-ordered id as text.
++ fn v7_string() String {
+    return v7().to_string()
+}
+
+// The version digit and the two variant bits, which say the id follows the standard. A `Uuid`
+// is a struct, so this returns the id rather than changing the caller's copy of it.
+fn with_version(id: Uuid, version: u8) Uuid {
+    id.bytes[6] = (id.bytes[6] & 0x0f) | (version << 4)
+    id.bytes[8] = (id.bytes[8] & 0x3f) | 0x80
+    return id
+}
