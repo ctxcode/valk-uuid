@@ -36,10 +36,8 @@ if uuid.is_valid(text) : println("that is an id")
 
 **Version 7** is the one to reach for in a database. The first 48 bits are the millisecond it
 was made, so ids sort by age and new rows land next to each other in the index, where version 4
-ids scatter across it and make the index slower to write and larger. Ids made in the same
-millisecond on one thread still come out in order: the twelve bits that follow the time count
-up, and a millisecond that runs out of them borrows the next one. A clock that steps backwards
-does not break the order either.
+ids scatter across it and make the index slower to write and larger. Ids made on one thread
+always come out in order, also within one millisecond and when the clock steps back.
 
 **Version 4** is 122 random bits, for ids that must say nothing at all — not even roughly when
 they were made.
@@ -51,7 +49,7 @@ own. **Version 3** is the same with MD5, for ids that were made that way before.
 
 ## The id itself
 
-`Uuid` is a struct of 16 bytes, so an id costs no allocation: it is passed and stored by value.
+`Uuid` is a struct of 16 bytes, passed and stored by value.
 
 ```rust
 id.to_string()     // 36 characters, lowercase, with dashes
