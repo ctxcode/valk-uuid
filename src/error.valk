@@ -1,6 +1,7 @@
-/// Thrown when text cannot be read as a UUID.
+/// Thrown when text or bytes cannot be read as a UUID.
 ///
 /// - `syntax`: not 32 hex digits, with or without the dashes, and not a `urn:uuid:` of one.
-+ error Error (syntax) payload {
+/// - `length`: `from_bytes` got other than 16 bytes.
++ error Error (syntax, length) payload {
     message: String
 }

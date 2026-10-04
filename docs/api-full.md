@@ -10,21 +10,26 @@ Namespaces: [main](#main)
 ## Errors for 'main'
 
 ```js
-// Thrown when text cannot be read as a UUID.
-+ error Error (syntax) payload { message: String }
+// Thrown when text or bytes cannot be read as a UUID.
++ error Error (syntax, length) payload { message: String }
 ```
 
 ### Error
 
-Thrown when text cannot be read as a UUID.
+Thrown when text or bytes cannot be read as a UUID.
 
 - `syntax`: not 32 hex digits, with or without the dashes, and not a `urn:uuid:` of one.
+- `length`: `from_bytes` got other than 16 bytes.
 
 ## Functions for 'main'
 
 ```js
+// Reads 16 bytes as a UUID, such as a binary column from a database.
++ fn from_bytes(bytes: &[u8]) Uuid !Error
 // Returns whether text reads as a UUID.
 + fn is_valid(text: String) bool
+// The id that is all ones.
++ fn max() Uuid
 // The id that is all zeroes.
 + fn nil() Uuid
 // Reads text as a UUID.
@@ -43,9 +48,19 @@ Thrown when text cannot be read as a UUID.
 + fn v7_string() String
 ```
 
+### from_bytes
+
+Reads 16 bytes as a UUID, such as a binary column from a database.
+
+Throws `length` when there are not exactly 16 bytes.
+
 ### is_valid
 
 Returns whether text reads as a UUID.
+
+### max
+
+The id that is all ones.
 
 ### nil
 
@@ -119,10 +134,14 @@ Returns a time-ordered id as text.
     + fn gt(other: Uuid) bool
     // Hashes the bytes, so an id can be a `HashMap` key.
     + fn hash() uint
+    // Returns whether every byte is 0xff.
+    + fn is_max() bool
     // Returns whether every byte is zero.
     + fn is_nil() bool
     // Orders ids by their bytes, which for version 7 is also the order they were made in.
     + fn lt(other: Uuid) bool
+    // Returns the UUID that is all ones, which the standard reserves as the largest id.
+    + static fn max() Uuid
     // Returns the UUID that is all zeroes, which stands for "no id".
     + static fn nil() Uuid
     // Returns the id as 32 hex digits, without the dashes.
@@ -133,7 +152,7 @@ Returns a time-ordered id as text.
     + fn to_urn() String
     // Returns the time a version 7 id was made, in milliseconds since the Unix epoch, or 0 for an id of another version.
     + fn unix_ms() uint
-    // Returns the version digit: 4 for a random id, 7 for a time-ordered one, 5 for a name based one, and 0 for the nil id.
+    // Returns the version digit: 4 for a random id, 7 for a time-ordered one, 5 for a name based one, and 0 for the nil and max ids.
     + fn version() uint
 }
 ```
@@ -171,6 +190,10 @@ Orders ids by their bytes.
 
 Hashes the bytes, so an id can be a `HashMap` key.
 
+#### is_max
+
+Returns whether every byte is 0xff.
+
 #### is_nil
 
 Returns whether every byte is zero.
@@ -178,6 +201,10 @@ Returns whether every byte is zero.
 #### lt
 
 Orders ids by their bytes, which for version 7 is also the order they were made in.
+
+#### max
+
+Returns the UUID that is all ones, which the standard reserves as the largest id.
 
 #### nil
 
@@ -203,7 +230,7 @@ an id of another version.
 #### version
 
 Returns the version digit: 4 for a random id, 7 for a time-ordered one, 5 for a name
-based one, and 0 for the nil id.
+based one, and 0 for the nil and max ids.
 
 ## Globals for 'main'
 

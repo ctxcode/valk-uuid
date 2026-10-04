@@ -10,15 +10,19 @@ Namespaces: [main](#main)
 ## Errors for 'main'
 
 ```js
-// Thrown when text cannot be read as a UUID.
-+ error Error (syntax) payload { message: String }
+// Thrown when text or bytes cannot be read as a UUID.
++ error Error (syntax, length) payload { message: String }
 ```
 
 ## Functions for 'main'
 
 ```js
+// Reads 16 bytes as a UUID, such as a binary column from a database.
++ fn from_bytes(bytes: &[u8]) Uuid !Error
 // Returns whether text reads as a UUID.
 + fn is_valid(text: String) bool
+// The id that is all ones.
++ fn max() Uuid
 // The id that is all zeroes.
 + fn nil() Uuid
 // Reads text as a UUID.
@@ -53,10 +57,14 @@ Namespaces: [main](#main)
     + fn gt(other: Uuid) bool
     // Hashes the bytes, so an id can be a `HashMap` key.
     + fn hash() uint
+    // Returns whether every byte is 0xff.
+    + fn is_max() bool
     // Returns whether every byte is zero.
     + fn is_nil() bool
     // Orders ids by their bytes, which for version 7 is also the order they were made in.
     + fn lt(other: Uuid) bool
+    // Returns the UUID that is all ones, which the standard reserves as the largest id.
+    + static fn max() Uuid
     // Returns the UUID that is all zeroes, which stands for "no id".
     + static fn nil() Uuid
     // Returns the id as 32 hex digits, without the dashes.
@@ -67,7 +75,7 @@ Namespaces: [main](#main)
     + fn to_urn() String
     // Returns the time a version 7 id was made, in milliseconds since the Unix epoch, or 0 for an id of another version.
     + fn unix_ms() uint
-    // Returns the version digit: 4 for a random id, 7 for a time-ordered one, 5 for a name based one, and 0 for the nil id.
+    // Returns the version digit: 4 for a random id, 7 for a time-ordered one, 5 for a name based one, and 0 for the nil and max ids.
     + fn version() uint
 }
 ```

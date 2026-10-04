@@ -49,15 +49,18 @@ own. **Version 3** is the same with MD5, for ids that were made that way before.
 
 ## The id itself
 
-`Uuid` is a struct of 16 bytes, passed and stored by value.
+`Uuid` is a struct of 16 bytes, passed and stored by value. `uuid.nil()` and `uuid.max()` are
+the all-zero and all-one ids, and `uuid.from_bytes(bytes)` reads 16 bytes, throwing `length` for
+any other count.
 
 ```rust
 id.to_string()     // 36 characters, lowercase, with dashes
 id.to_hex()        // 32 digits, no dashes
 id.to_urn()        // urn:uuid:...
 id.bytes           // the 16 bytes
-id.version()       // 4, 7, 5, 3, or 0 for the nil id
+id.version()       // 4, 7, 5, 3, or 0 for the nil and max ids
 id.is_nil()        // whether every byte is zero
+id.is_max()        // whether every byte is 0xff
 id.unix_ms()       // when a version 7 id was made; 0 for the others
 ```
 
@@ -67,7 +70,7 @@ order.
 
 ## Reading text
 
-`parse` takes the 36 character form, the 32 digits without dashes, a `urn:uuid:` in front, and
+`parse` takes the 36 character form (dashes only at their usual places), the 32 digits without dashes, a `urn:uuid:` in front, and
 braces around it, in upper or lower case. It throws `syntax` with a message naming the text when
 it is none of those; `is_valid` answers the same question with a bool.
 

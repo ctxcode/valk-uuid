@@ -29,21 +29,15 @@ global last_counter: uint (0)
 + fn v7() Uuid {
     let now = time.unix_ms()
     let counter: uint = 0
-    if now == last_ms {
+    // The same millisecond, or the clock went backwards: keep the order rather than the time
+    if now <= last_ms {
+        now = last_ms
         counter = last_counter + 1
         // Twelve bits; a millisecond that runs out of them borrows the next one
         if counter > 0xfff {
             now++
-            last_ms = now
             counter = 0
         }
-    } else if now < last_ms {
-        // The clock went backwards: keep the order rather than the time
-        now = last_ms
-        counter = last_counter + 1
-    } else {
-        last_ms = now
-        counter = 0
     }
     last_ms = now
     last_counter = counter
@@ -115,6 +109,11 @@ global last_counter: uint (0)
 /// The id that is all zeroes.
 + fn nil() Uuid {
     return Uuid.nil()
+}
+
+/// The id that is all ones.
++ fn max() Uuid {
+    return Uuid.max()
 }
 
 /// Returns a random id as text, for the many places that only want the string.

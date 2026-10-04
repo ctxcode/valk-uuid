@@ -19,6 +19,11 @@ use valk.crypto
         return SELF { bytes: { 0... } }
     }
 
+    /// Returns the UUID that is all ones, which the standard reserves as the largest id.
+    + static fn max() SELF {
+        return SELF { bytes: { 0xff... } }
+    }
+
     /// Returns whether every byte is zero.
     + fn is_nil() bool {
         let i: uint = 0
@@ -29,10 +34,20 @@ use valk.crypto
         return true
     }
 
+    /// Returns whether every byte is 0xff.
+    + fn is_max() bool {
+        let i: uint = 0
+        while i < 16 {
+            if this.bytes[i] != 0xff : return false
+            i++
+        }
+        return true
+    }
+
     /// Returns the version digit: 4 for a random id, 7 for a time-ordered one, 5 for a name
-    /// based one, and 0 for the nil id.
+    /// based one, and 0 for the nil and max ids.
     + fn version() uint {
-        if this.is_nil() : return 0
+        if this.is_nil() || this.is_max() : return 0
         return (this.bytes[6] >> 4).to(uint)
     }
 
@@ -106,7 +121,14 @@ use valk.crypto
 
     /// Hashes the bytes, so an id can be a `HashMap` key.
     + fn hash() uint $hash {
-        return this.to_hex().hash()
+        let hash: uint = 0xcbf29ce484222325
+        let i: uint = 0
+        while i < 16 {
+            hash ^= this.bytes[i]
+            hash *= 0x100000001b3
+            i++
+        }
+        return hash
     }
 }
 

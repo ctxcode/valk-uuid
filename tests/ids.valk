@@ -134,3 +134,60 @@ test "Ids as values" {
     assert((names.get(id) !? "") == "ada")
     assert(!names.has(uuid.v4()))
 }
+
+test "Strict reading" {
+    // Dashes only where the standard puts them
+    assert(!uuid.is_valid("6ba7-b8109dad11d180b400c04fd430c8"))
+    assert(!uuid.is_valid("------6ba7b8109dad11d180b400c04fd430c8"))
+    assert(!uuid.is_valid("6ba7b8109dad11d1-80b4-00c04fd430c8"))
+    assert(!uuid.is_valid("6ba7b810-9dad-11d1-80b4-00c04fd430c-8"))
+    assert(!uuid.is_valid("6ba7b8109-dad-11d1-80b4-00c04fd430c8"))
+    assert(!uuid.is_valid("6ba7b810-9dad-11d1-80b400c04fd430c8"))
+    assert(!uuid.is_valid("6ba7b810x9dad-11d1-80b4-00c04fd430c8"))
+    assert(!uuid.is_valid("6ba7b810-9dad-11d1-80b4-00c04fd430c8 "))
+    assert(!uuid.is_valid("6ba7b810-9dad-11d1-80b4-00c04fd430cg"))
+    assert(!uuid.is_valid("{6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+    assert(!uuid.is_valid("{}"))
+    assert(!uuid.is_valid("{"))
+    assert(!uuid.is_valid("urn:uuid:"))
+    assert(!uuid.is_valid("------------------------------------"))
+    assert(uuid.is_valid("{6ba7b8109dad11d180b400c04fd430c8}"))
+    assert(uuid.is_valid("URN:UUID:6BA7B810-9DAD-11D1-80B4-00C04FD430C8"))
+}
+
+test "Many time ordered ids" {
+    // More than the twelve counter bits hold in one millisecond, so later ids borrow ahead
+    let previous = uuid.v7()
+    let ordered = true
+    let i: uint = 0
+    while i++ < 100000 {
+        let current = uuid.v7()
+        if !(current > previous) || current.version() != 7 || (current.bytes[8] & 0xc0) != 0x80 : ordered = false
+        previous = current
+    }
+    assert(ordered)
+}
+
+test "Nil, max and bytes" {
+    let max = uuid.max()
+    assert(max.is_max())
+    assert(!max.is_nil())
+    assert(max.version() == 0)
+    assert(max.to_string() == "ffffffff-ffff-ffff-ffff-ffffffffffff")
+    assert((uuid.parse("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF") !! ) == max)
+    assert(uuid.nil() < max)
+    assert(uuid.v7() < max)
+
+    let id = uuid.v4()
+    let back = uuid.from_bytes(&id.bytes) ! { assert(false) return }
+    assert(back == id)
+    assert(back.hash() == id.hash())
+    let short: [u8 x 3] = { 1, 2, 3 }
+    let threw = false
+    uuid.from_bytes(&short) ! {
+        assert(error_is(E.code, length))
+        threw = true
+    }
+    assert(threw)
+    assert(!uuid.is_valid(""))
+}
