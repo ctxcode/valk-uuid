@@ -19,7 +19,7 @@
 /// ```
 + fn parse(text: String) Uuid !Error {
     let value = text
-    if value.starts_with("urn:uuid:") || value.starts_with("URN:UUID:") {
+    if value.length >= 9 && value.view(0, 9).equals_ignore_ascii_case("urn:uuid:") {
         value = value.range(9, value.length - 9)
     }
     if value.length > 1 && value[0] == '{' && value[value.length - 1] == '}' {

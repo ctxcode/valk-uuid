@@ -71,7 +71,7 @@ order.
 ## Reading text
 
 `parse` takes the 36 character form (dashes only at their usual places), the 32 digits without dashes, a `urn:uuid:` in front, and
-braces around it, in upper or lower case. It throws `syntax` with a message naming the text when
+braces around it, in any case. It throws `syntax` with a message naming the text when
 it is none of those; `is_valid` answers the same question with a bool.
 
 ## Development

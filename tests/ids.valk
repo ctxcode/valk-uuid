@@ -153,6 +153,9 @@ test "Strict reading" {
     assert(!uuid.is_valid("------------------------------------"))
     assert(uuid.is_valid("{6ba7b8109dad11d180b400c04fd430c8}"))
     assert(uuid.is_valid("URN:UUID:6BA7B810-9DAD-11D1-80B4-00C04FD430C8"))
+    // The URN prefix is case-insensitive
+    assert(uuid.is_valid("Urn:Uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
+    assert(!uuid.is_valid("urn:uid:6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
 }
 
 test "Many time ordered ids" {
