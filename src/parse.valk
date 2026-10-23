@@ -48,7 +48,7 @@
 /// Reads 16 bytes as a UUID, such as a binary column from a database.
 ///
 /// Throws `length` when there are not exactly 16 bytes.
-+ fn from_bytes(bytes: &[u8]) Uuid !Error {
++ fn from_bytes(bytes: local &[u8]) Uuid !Error {
     if bytes.length != 16 : throw .length { message: "a UUID is 16 bytes, not " + bytes.length }
     let id = Uuid.nil()
     let i: uint = 0
