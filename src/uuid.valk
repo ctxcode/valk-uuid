@@ -120,7 +120,7 @@ use valk.crypto
     }
 
     /// Hashes the bytes, so an id can be a `HashMap` key.
-    + fn hash() uint $hash {
+    + fn hash() uint {
         let hash: uint = 0xcbf29ce484222325
         let i: uint = 0
         while i < 16 {
