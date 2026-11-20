@@ -1,0 +1,77 @@
+use uuid
+use valk.json
+
+class Record {
+    id: uuid.Uuid
+    parent_id: ?uuid.Uuid
+    trace_id: uuid.Ulid
+    prev_trace: ?uuid.Ulid
+}
+
+test "Uuid JSON round-trip" {
+    let id = uuid.parse("019283a1-9c4e-7c3e-8f12-6a0b1d2e3f40") ! { assert(false) return }
+    let parent = uuid.v4()
+    let trace = uuid.parse_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV") ! { assert(false) return }
+    let prev = uuid.ulid()
+
+    // Non-null fields
+    let rec = Record { id: id, parent_id: parent, trace_id: trace, prev_trace: prev }
+    let encoded = json.encode(rec)
+    assert(encoded == "{\"id\":\"" + id.to_string() + "\",\"parent_id\":\"" + parent.to_string() + "\",\"trace_id\":\"" + trace.to_string() + "\",\"prev_trace\":\"" + prev.to_string() + "\"}")
+
+    let decoded = json.decode_to[Record](encoded) ! { assert(false) return }
+    assert(decoded.id == id)
+    assert((decoded.parent_id ?? uuid.nil()) == parent)
+    assert(decoded.trace_id == trace)
+    assert((decoded.prev_trace ?? uuid.Ulid.nil()) == prev)
+
+    // Nullable fields set to null
+    let rec_null = Record { id: id, parent_id: null, trace_id: trace, prev_trace: null }
+    let encoded_null = json.encode(rec_null)
+    assert(encoded_null == "{\"id\":\"019283a1-9c4e-7c3e-8f12-6a0b1d2e3f40\",\"parent_id\":null,\"trace_id\":\"01ARZ3NDEKTSV4RRFFQ69G5FAV\",\"prev_trace\":null}")
+
+    let decoded_null = json.decode_to[Record](encoded_null) ! { assert(false) return }
+    assert(decoded_null.id == id)
+    assert(!isset(decoded_null.parent_id))
+    assert(decoded_null.trace_id == trace)
+    assert(!isset(decoded_null.prev_trace))
+
+    // Standalone json.encode / json.decode_to / json.from
+    assert(json.encode(id) == "\"019283a1-9c4e-7c3e-8f12-6a0b1d2e3f40\"")
+    let parsed_id = json.decode_to[uuid.Uuid]("\"019283a1-9c4e-7c3e-8f12-6a0b1d2e3f40\"") ! { assert(false) return }
+    assert(parsed_id == id)
+
+    assert(json.encode(trace) == "\"01ARZ3NDEKTSV4RRFFQ69G5FAV\"")
+    let parsed_trace = json.decode_to[uuid.Ulid]("\"01ARZ3NDEKTSV4RRFFQ69G5FAV\"") ! { assert(false) return }
+    assert(parsed_trace == trace)
+}
+
+test "Uuid and Ulid JSON invalid input" {
+    // Invalid UUID string
+    let failed = false
+    json.decode_to[Record]("{\"id\":\"not-a-uuid\",\"parent_id\":null,\"trace_id\":\"01ARZ3NDEKTSV4RRFFQ69G5FAV\",\"prev_trace\":null}") ! {
+        failed = true
+    }
+    assert(failed)
+
+    // Non-string for UUID
+    failed = false
+    json.decode_to[Record]("{\"id\":12345,\"parent_id\":null,\"trace_id\":\"01ARZ3NDEKTSV4RRFFQ69G5FAV\",\"prev_trace\":null}") ! {
+        failed = true
+    }
+    assert(failed)
+
+    // Invalid ULID string
+    failed = false
+    json.decode_to[Record]("{\"id\":\"019283a1-9c4e-7c3e-8f12-6a0b1d2e3f40\",\"parent_id\":null,\"trace_id\":\"not-a-ulid\",\"prev_trace\":null}") ! {
+        failed = true
+    }
+    assert(failed)
+
+    // Non-string for ULID
+    failed = false
+    json.decode_to[uuid.Ulid]("999") ! {
+        failed = true
+    }
+    assert(failed)
+}

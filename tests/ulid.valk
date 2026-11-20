@@ -1,0 +1,133 @@
+use uuid
+use valk.time
+
+test "ULID generation and timestamps" {
+    let first = uuid.ulid()
+    assert(!first.is_nil())
+    assert(!first.is_max())
+
+    let text = first.to_string()
+    assert(text.length == 26)
+    assert(uuid.is_valid_ulid(text))
+
+    let str_id = uuid.ulid_string()
+    assert(str_id.length == 26)
+    assert(uuid.is_valid_ulid(str_id))
+
+    let now = time.unix_ms()
+    let made = first.unix_ms()
+    assert(made > 0)
+    assert(made <= now + 1000)
+    assert(made > now - 10000)
+
+    let back = uuid.parse_ulid(text) ! { assert(false) return }
+    assert(back == first)
+    assert(back.to_string() == text)
+    assert(back.unix_ms() == first.unix_ms())
+}
+
+test "ULID monotonicity" {
+    let ids = Array[uuid.Ulid]{}
+    let i: uint = 0
+    while i++ < 10000 : ids.append(uuid.ulid())
+
+    let ordered = true
+    let str_ordered = true
+    let n: uint = 1
+    while n < ids.length {
+        let prev = ids.get(n - 1) !!
+        let curr = ids.get(n) !!
+        if !(curr > prev) : ordered = false
+        if !(curr.to_string() > prev.to_string()) : str_ordered = false
+        n++
+    }
+    assert(ordered)
+    assert(str_ordered)
+}
+
+test "ULID parsing and validation" {
+    // Known spec vectors
+    let spec = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    let id = uuid.parse_ulid(spec) ! { assert(false) return }
+    assert(id.to_string() == spec)
+    assert(id.unix_ms() == 1469922850259)
+    assert(id.to_uuid().to_string() == "01563e3a-b5d3-d676-4c61-efb99302bd5b")
+
+    let spec2 = "01ARYZ6S41TSV4RRFFQ69G5FAV"
+    let id2 = uuid.parse_ulid(spec2) ! { assert(false) return }
+    assert(id2.to_string() == spec2)
+    assert(id2.unix_ms() == 1469918176385)
+
+    // Case-insensitive parsing
+    let lower = uuid.parse_ulid("01arz3ndektsv4rrffq69g5fav") ! { assert(false) return }
+    assert(lower == id)
+    assert(lower.to_string() == spec)
+
+    // Nil and max ULIDs
+    let z = uuid.Ulid.nil()
+    assert(z.is_nil())
+    assert(!z.is_max())
+    assert(z.unix_ms() == 0)
+    assert(z.to_string() == "00000000000000000000000000")
+    assert((uuid.parse_ulid("00000000000000000000000000") !! ) == z)
+
+    let m = uuid.Ulid.max()
+    assert(m.is_max())
+    assert(!m.is_nil())
+    assert(m.unix_ms() == 0xffffffffffff)
+    assert(m.to_string() == "7ZZZZZZZZZZZZZZZZZZZZZZZZZ")
+    assert((uuid.parse_ulid("7ZZZZZZZZZZZZZZZZZZZZZZZZZ") !! ) == m)
+    assert(z < m)
+    assert(id > z && id < m)
+
+    // Invalid ULIDs
+    assert(!uuid.is_valid_ulid(""))
+    assert(!uuid.is_valid_ulid("01ARZ3NDEKTSV4RRFFQ69G5FA"))     // 25 chars
+    assert(!uuid.is_valid_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAVX"))   // 27 chars
+    assert(!uuid.is_valid_ulid("80000000000000000000000000"))    // overflows 128 bits
+    assert(!uuid.is_valid_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAI"))    // I excluded
+    assert(!uuid.is_valid_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAL"))    // L excluded
+    assert(!uuid.is_valid_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAO"))    // O excluded
+    assert(!uuid.is_valid_ulid("01ARZ3NDEKTSV4RRFFQ69G5FAU"))    // U excluded
+    assert(!uuid.is_valid_ulid("01ARZ3NDEK-SV4RRFFQ69G5FAV"))    // dash not allowed
+
+    let threw = false
+    uuid.parse_ulid("80000000000000000000000000") ! {
+        assert(error_is(E.code, syntax))
+        threw = true
+    }
+    assert(threw)
+}
+
+test "ULID and UUID conversion and value semantics" {
+    let u = uuid.ulid()
+    let as_uuid = u.to_uuid()
+    let back = as_uuid.to_ulid()
+    assert(back == u)
+    assert(as_uuid.to_ulid().to_string() == u.to_string())
+
+    // Round-trip from UUID v7 -> ULID -> UUID
+    let v7 = uuid.v7()
+    let v7_ulid = v7.to_ulid()
+    assert(v7_ulid.unix_ms() == v7.unix_ms())
+    assert(v7_ulid.to_uuid() == v7)
+
+    // Sorting and HashMap key support
+    let a = uuid.ulid()
+    let b = uuid.ulid()
+    let c = uuid.ulid()
+    let list = Array[uuid.Ulid]{ c, a, b }
+    list.sort()
+    assert((list.get(0) !! ) == a)
+    assert((list.get(1) !! ) == b)
+    assert((list.get(2) !! ) == c)
+    assert(a.compare(b) == -1)
+    assert(b.compare(b) == 0)
+    assert(c.compare(a) == 1)
+
+    let map: HashMap[uuid.Ulid, String] = .{}
+    map.set(a, "first")
+    assert((map.get(a) !? "") == "first")
+    assert(!map.has(b))
+    assert(a.hash() == (a.to_uuid().to_ulid()).hash())
+}

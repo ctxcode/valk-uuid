@@ -10,30 +10,38 @@ Namespaces: [main](#main)
 ## Errors for 'main'
 
 ```js
-// Thrown when text or bytes cannot be read as a UUID.
+// Thrown when text or bytes cannot be read as a UUID or ULID.
 + error Error (syntax, length) payload { message: String }
 ```
 
 ### Error
 
-Thrown when text or bytes cannot be read as a UUID.
+Thrown when text or bytes cannot be read as a UUID or ULID.
 
-- `syntax`: not 32 hex digits, with or without the dashes, and not a `urn:uuid:` of one.
+- `syntax`: not a valid UUID (32 hex digits, with or without dashes, or `urn:uuid:`) or ULID (26 Crockford Base32 characters).
 - `length`: `from_bytes` got other than 16 bytes.
 
 ## Functions for 'main'
 
 ```js
 // Reads 16 bytes as a UUID, such as a binary column from a database.
-+ fn from_bytes(bytes: &[u8]) Uuid !Error
++ fn from_bytes(bytes: local &[u8]) Uuid !Error
 // Returns whether text reads as a UUID.
 + fn is_valid(text: String) bool
+// Returns whether text parses as a valid ULID.
++ fn is_valid_ulid(text: String) bool
 // The id that is all ones.
 + fn max() Uuid
 // The id that is all zeroes.
 + fn nil() Uuid
 // Reads text as a UUID.
 + fn parse(text: String) Uuid !Error
+// Parses a 26-character Crockford Base32 string as a ULID (case-insensitive).
++ fn parse_ulid(text: String) Ulid !Error
+// Returns a new time-ordered ULID.
++ fn ulid() Ulid
+// Returns a new ULID as its 26-character Crockford Base32 string.
++ fn ulid_string() String
 // Returns the id a name has inside a namespace, using MD5: version 3.
 + fn v3(namespace: Uuid, name: String) Uuid
 // Returns a random id: version 4, 122 bits from the system's random source.
@@ -58,6 +66,10 @@ Throws `length` when there are not exactly 16 bytes.
 
 Returns whether text reads as a UUID.
 
+### is_valid_ulid
+
+Returns whether text parses as a valid ULID.
+
 ### max
 
 The id that is all ones.
@@ -78,6 +90,23 @@ Throws `syntax` when the text is not one of those.
 ```valk
 let id = uuid.parse("6ba7b810-9dad-11d1-80b4-00c04fd430c8") ! panic("%{E.message}")
 ```
+
+### parse_ulid
+
+Parses a 26-character Crockford Base32 string as a ULID (case-insensitive).
+
+Throws `syntax` if the string is not 26 valid Crockford Base32 characters or overflows 128 bits.
+
+### ulid
+
+Returns a new time-ordered ULID.
+
+ULIDs made on the same thread within the same millisecond (or if the clock steps back) increment
+the 80-bit random component so they remain strictly monotonic.
+
+### ulid_string
+
+Returns a new ULID as its 26-character Crockford Base32 string.
 
 ### v3
 
@@ -121,6 +150,110 @@ Returns a time-ordered id as text.
 ## Classes for 'main'
 
 ```js
+// The 16 bytes of a ULID (Universally Unique Lexicographically Sortable Identifier).
++ struct Ulid {
+    // The 16 bytes, in big-endian order (6 bytes timestamp + 10 bytes randomness).
+    + bytes: [u8 x 16]
+
+    // Returns -1, 0 or 1, comparing the bytes in order.
+    + fn compare(other: Ulid) int
+    // Returns whether two ULIDs are equal. Backs `==`.
+    + fn equals(other: Ulid) bool
+    // Reads a `Ulid` from a JSON string, for `valk.json`'s `to_type` and `decode_to`.
+    + static fn from_json_value_auto[X](value: X) Ulid !LookupError
+    // Orders ULIDs by their bytes.
+    + fn gt(other: Ulid) bool
+    // Hashes the bytes, so a ULID can be a `HashMap` key.
+    + fn hash() uint
+    // Returns whether every byte is 0xff.
+    + fn is_max() bool
+    // Returns whether every byte is zero.
+    + fn is_nil() bool
+    // Orders ULIDs by their bytes (matching chronological and string order).
+    + fn lt(other: Ulid) bool
+    // Returns the largest ULID (`7ZZZZZZZZZZZZZZZZZZZZZZZZZ`).
+    + static fn max() Ulid
+    // Returns the all-zero ULID (`00000000000000000000000000`).
+    + static fn nil() Ulid
+    // Returns `to_string()`: `valk.json` writes a `Ulid` as a 26-character JSON string.
+    + fn to_json_string() String
+    // Encodes the ULID as 26 uppercase Crockford Base32 characters.
+    + fn to_string() String
+    // Reinterprets the 16 bytes as a UUID.
+    + fn to_uuid() Uuid
+    // Returns the timestamp embedded in the ULID, in milliseconds since the Unix epoch.
+    + fn unix_ms() uint
+}
+```
+
+### Ulid
+
+The 16 bytes of a ULID (Universally Unique Lexicographically Sortable Identifier).
+
+The first 48 bits are the Unix timestamp in milliseconds, followed by 80 bits of randomness.
+Encodes as 26 uppercase Crockford Base32 characters that sort in the same order as the bytes.
+
+#### bytes
+
+The 16 bytes, in big-endian order (6 bytes timestamp + 10 bytes randomness).
+
+#### compare
+
+Returns -1, 0 or 1, comparing the bytes in order.
+
+#### equals
+
+Returns whether two ULIDs are equal. Backs `==`.
+
+#### from_json_value_auto
+
+Reads a `Ulid` from a JSON string, for `valk.json`'s `to_type` and `decode_to`.
+
+#### gt
+
+Orders ULIDs by their bytes.
+
+#### hash
+
+Hashes the bytes, so a ULID can be a `HashMap` key.
+
+#### is_max
+
+Returns whether every byte is 0xff.
+
+#### is_nil
+
+Returns whether every byte is zero.
+
+#### lt
+
+Orders ULIDs by their bytes (matching chronological and string order).
+
+#### max
+
+Returns the largest ULID (`7ZZZZZZZZZZZZZZZZZZZZZZZZZ`).
+
+#### nil
+
+Returns the all-zero ULID (`00000000000000000000000000`).
+
+#### to_json_string
+
+Returns `to_string()`: `valk.json` writes a `Ulid` as a 26-character JSON string.
+
+#### to_string
+
+Encodes the ULID as 26 uppercase Crockford Base32 characters.
+
+#### to_uuid
+
+Reinterprets the 16 bytes as a UUID.
+
+#### unix_ms
+
+Returns the timestamp embedded in the ULID, in milliseconds since the Unix epoch.
+
+```js
 // The 16 bytes of a UUID.
 + struct Uuid {
     // The bytes, in the order they are written.
@@ -130,6 +263,8 @@ Returns a time-ordered id as text.
     + fn compare(other: Uuid) int
     // Returns whether two ids are the same. Backs `==`.
     + fn equals(other: Uuid) bool
+    // Reads a `Uuid` from a JSON string, for `valk.json`'s `to_type` and `decode_to`.
+    + static fn from_json_value_auto[X](value: X) Uuid !LookupError
     // Orders ids by their bytes.
     + fn gt(other: Uuid) bool
     // Hashes the bytes, so an id can be a `HashMap` key.
@@ -146,8 +281,12 @@ Returns a time-ordered id as text.
     + static fn nil() Uuid
     // Returns the id as 32 hex digits, without the dashes.
     + fn to_hex() String
+    // Returns `to_string()`: `valk.json` writes a `Uuid` as a canonical JSON string.
+    + fn to_json_string() String
     // Returns the id as text: 36 characters, lowercase, with the usual dashes.
     + fn to_string() String
+    // Reinterprets the 16 bytes as a ULID.
+    + fn to_ulid() Ulid
     // Returns the id as `urn:uuid:...`.
     + fn to_urn() String
     // Returns the time a version 7 id was made, in milliseconds since the Unix epoch, or 0 for an id of another version.
@@ -182,6 +321,10 @@ Returns -1, 0 or 1, comparing the bytes in order.
 
 Returns whether two ids are the same. Backs `==`.
 
+#### from_json_value_auto
+
+Reads a `Uuid` from a JSON string, for `valk.json`'s `to_type` and `decode_to`.
+
 #### gt
 
 Orders ids by their bytes.
@@ -214,9 +357,17 @@ Returns the UUID that is all zeroes, which stands for "no id".
 
 Returns the id as 32 hex digits, without the dashes.
 
+#### to_json_string
+
+Returns `to_string()`: `valk.json` writes a `Uuid` as a canonical JSON string.
+
 #### to_string
 
 Returns the id as text: 36 characters, lowercase, with the usual dashes.
+
+#### to_ulid
+
+Reinterprets the 16 bytes as a ULID.
 
 #### to_urn
 

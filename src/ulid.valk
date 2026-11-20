@@ -1,0 +1,260 @@
+use valk.crypto
+use valk.time
+
+value CROCKFORD ("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
+
+// Per-thread monotonicity state for ULID generation within the same millisecond.
+global ulid_last_ms: uint (0)
+global ulid_last_rand: [u8 x 10] ({ 0... })
+
+/// The 16 bytes of a ULID (Universally Unique Lexicographically Sortable Identifier).
+///
+/// The first 48 bits are the Unix timestamp in milliseconds, followed by 80 bits of randomness.
+/// Encodes as 26 uppercase Crockford Base32 characters that sort in the same order as the bytes.
++ struct Ulid {
+    /// The 16 bytes, in big-endian order (6 bytes timestamp + 10 bytes randomness).
+    + bytes: [u8 x 16]
+
+    /// Returns the all-zero ULID (`00000000000000000000000000`).
+    + static fn nil() SELF $default {
+        return SELF { bytes: { 0... } }
+    }
+
+    /// Returns the largest ULID (`7ZZZZZZZZZZZZZZZZZZZZZZZZZ`).
+    + static fn max() SELF {
+        return SELF { bytes: { 0xff... } }
+    }
+
+    /// Returns whether every byte is zero.
+    + fn is_nil() bool {
+        let i: uint = 0
+        while i < 16 {
+            if this.bytes[i] != 0 : return false
+            i++
+        }
+        return true
+    }
+
+    /// Returns whether every byte is 0xff.
+    + fn is_max() bool {
+        let i: uint = 0
+        while i < 16 {
+            if this.bytes[i] != 0xff : return false
+            i++
+        }
+        return true
+    }
+
+    /// Returns the timestamp embedded in the ULID, in milliseconds since the Unix epoch.
+    + fn unix_ms() uint {
+        let value: uint = 0
+        let i: uint = 0
+        while i < 6 {
+            value = (value << 8) | this.bytes[i].to(uint)
+            i++
+        }
+        return value
+    }
+
+    /// Encodes the ULID as 26 uppercase Crockford Base32 characters.
+    + fn to_string() String $auto {
+        let b = this.bytes
+        let out = ByteBuffer.new(26)
+        // 48-bit timestamp -> 10 Base32 characters
+        out.write_byte(CROCKFORD[((b[0] & 0xe0) >> 5).to(uint)])
+        out.write_byte(CROCKFORD[(b[0] & 0x1f).to(uint)])
+        out.write_byte(CROCKFORD[((b[1] & 0xf8) >> 3).to(uint)])
+        out.write_byte(CROCKFORD[(((b[1] & 0x07) << 2) | ((b[2] & 0xc0) >> 6)).to(uint)])
+        out.write_byte(CROCKFORD[((b[2] & 0x3e) >> 1).to(uint)])
+        out.write_byte(CROCKFORD[(((b[2] & 0x01) << 4) | ((b[3] & 0xf0) >> 4)).to(uint)])
+        out.write_byte(CROCKFORD[(((b[3] & 0x0f) << 1) | ((b[4] & 0x80) >> 7)).to(uint)])
+        out.write_byte(CROCKFORD[((b[4] & 0x7c) >> 2).to(uint)])
+        out.write_byte(CROCKFORD[(((b[4] & 0x03) << 3) | ((b[5] & 0xe0) >> 5)).to(uint)])
+        out.write_byte(CROCKFORD[(b[5] & 0x1f).to(uint)])
+        // 80-bit randomness -> 16 Base32 characters (two 5-byte / 8-char blocks)
+        write_base32_block(out, b[6], b[7], b[8], b[9], b[10])
+        write_base32_block(out, b[11], b[12], b[13], b[14], b[15])
+        return out.to_string()
+    }
+
+    /// Reinterprets the 16 bytes as a UUID.
+    + fn to_uuid() Uuid {
+        return Uuid { bytes: this.bytes }
+    }
+
+    /// Returns whether two ULIDs are equal. Backs `==`.
+    + fn equals(other: SELF) bool $eq {
+        let i: uint = 0
+        while i < 16 {
+            if this.bytes[i] != other.bytes[i] : return false
+            i++
+        }
+        return true
+    }
+
+    /// Orders ULIDs by their bytes (matching chronological and string order).
+    + fn lt(other: SELF) bool $lt {
+        return this.compare(other) < 0
+    }
+
+    /// Orders ULIDs by their bytes.
+    + fn gt(other: SELF) bool $gt {
+        return this.compare(other) > 0
+    }
+
+    /// Returns -1, 0 or 1, comparing the bytes in order.
+    + fn compare(other: SELF) int {
+        let i: uint = 0
+        while i < 16 {
+            let mine = this.bytes[i]
+            let theirs = other.bytes[i]
+            if mine < theirs : return -1
+            if mine > theirs : return 1
+            i++
+        }
+        return 0
+    }
+
+    /// Hashes the bytes, so a ULID can be a `HashMap` key.
+    + fn hash() uint {
+        let hash: uint = 0xcbf29ce484222325
+        let i: uint = 0
+        while i < 16 {
+            hash ^= this.bytes[i]
+            hash *= 0x100000001b3
+            i++
+        }
+        return hash
+    }
+
+    /// Returns `to_string()`: `valk.json` writes a `Ulid` as a 26-character JSON string.
+    + fn to_json_string() String {
+        return this.to_string()
+    }
+
+    /// Reads a `Ulid` from a JSON string, for `valk.json`'s `to_type` and `decode_to`.
+    + static fn from_json_value_auto[X](value: X) Ulid !LookupError {
+        if !value.is_string : throw .missing
+        return parse_ulid(value.string) ! throw .missing
+    }
+}
+
+/// Returns a new time-ordered ULID.
+///
+/// ULIDs made on the same thread within the same millisecond (or if the clock steps back) increment
+/// the 80-bit random component so they remain strictly monotonic.
++ fn ulid() Ulid {
+    let now = time.unix_ms()
+    if now <= ulid_last_ms {
+        now = ulid_last_ms
+        // Increment 80-bit big-endian random component by 1
+        let carry = true
+        let idx: int = 9
+        while idx >= 0 && carry {
+            let v = ulid_last_rand[idx.to(uint)]
+            if v == 0xff {
+                ulid_last_rand[idx.to(uint)] = 0
+            } else {
+                ulid_last_rand[idx.to(uint)] = v + 1
+                carry = false
+            }
+            idx--
+        }
+        if carry : now++
+    } else {
+        let random = crypto.random_bytes(10)
+        let i: uint = 0
+        while i < 10 {
+            ulid_last_rand[i] = random[i]
+            i++
+        }
+    }
+    ulid_last_ms = now
+
+    let id = Ulid.nil()
+    let shift: uint = 40
+    let i: uint = 0
+    while i < 6 {
+        id.bytes[i] = ((now >> shift) & 0xff).to(u8)
+        shift -= 8
+        i++
+    }
+    i = 0
+    while i < 10 {
+        id.bytes[6 + i] = ulid_last_rand[i]
+        i++
+    }
+    return id
+}
+
+/// Returns a new ULID as its 26-character Crockford Base32 string.
++ fn ulid_string() String {
+    return ulid().to_string()
+}
+
+/// Parses a 26-character Crockford Base32 string as a ULID (case-insensitive).
+///
+/// Throws `syntax` if the string is not 26 valid Crockford Base32 characters or overflows 128 bits.
++ fn parse_ulid(text: String) Ulid !Error {
+    if text.length != 26 {
+        throw .syntax { message: "'" + text + "' is not a 26-character ULID" }
+    }
+    let v: [u8 x 26] = { 0... }
+    let i: uint = 0
+    while i < 26 {
+        v[i] = crockford_value(text[i]) ! throw .syntax { message: "'" + text + "' has a character that is not valid Crockford Base32" }
+        i++
+    }
+    if v[0] > 7 {
+        throw .syntax { message: "'" + text + "' overflows 128 bits" }
+    }
+
+    let id = Ulid.nil()
+    id.bytes[0] = (v[0] << 5) | v[1]
+    id.bytes[1] = (v[2] << 3) | (v[3] >> 2)
+    id.bytes[2] = ((v[3] & 0x03) << 6) | (v[4] << 1) | (v[5] >> 4)
+    id.bytes[3] = ((v[5] & 0x0f) << 4) | (v[6] >> 1)
+    id.bytes[4] = ((v[6] & 0x01) << 7) | (v[7] << 2) | (v[8] >> 3)
+    id.bytes[5] = ((v[8] & 0x07) << 5) | v[9]
+    id.bytes[6] = (v[10] << 3) | (v[11] >> 2)
+    id.bytes[7] = ((v[11] & 0x03) << 6) | (v[12] << 1) | (v[13] >> 4)
+    id.bytes[8] = ((v[13] & 0x0f) << 4) | (v[14] >> 1)
+    id.bytes[9] = ((v[14] & 0x01) << 7) | (v[15] << 2) | (v[16] >> 3)
+    id.bytes[10] = ((v[16] & 0x07) << 5) | v[17]
+    id.bytes[11] = (v[18] << 3) | (v[19] >> 2)
+    id.bytes[12] = ((v[19] & 0x03) << 6) | (v[20] << 1) | (v[21] >> 4)
+    id.bytes[13] = ((v[21] & 0x0f) << 4) | (v[22] >> 1)
+    id.bytes[14] = ((v[22] & 0x01) << 7) | (v[23] << 2) | (v[24] >> 3)
+    id.bytes[15] = ((v[24] & 0x07) << 5) | v[25]
+    return id
+}
+
+/// Returns whether text parses as a valid ULID.
++ fn is_valid_ulid(text: String) bool {
+    parse_ulid(text) ! return false
+    return true
+}
+
+fn write_base32_block(out: ByteBuffer, b0: u8, b1: u8, b2: u8, b3: u8, b4: u8) {
+    out.write_byte(CROCKFORD[((b0 & 0xf8) >> 3).to(uint)])
+    out.write_byte(CROCKFORD[(((b0 & 0x07) << 2) | ((b1 & 0xc0) >> 6)).to(uint)])
+    out.write_byte(CROCKFORD[((b1 & 0x3e) >> 1).to(uint)])
+    out.write_byte(CROCKFORD[(((b1 & 0x01) << 4) | ((b2 & 0xf0) >> 4)).to(uint)])
+    out.write_byte(CROCKFORD[(((b2 & 0x0f) << 1) | ((b3 & 0x80) >> 7)).to(uint)])
+    out.write_byte(CROCKFORD[((b3 & 0x7c) >> 2).to(uint)])
+    out.write_byte(CROCKFORD[(((b3 & 0x03) << 3) | ((b4 & 0xe0) >> 5)).to(uint)])
+    out.write_byte(CROCKFORD[(b4 & 0x1f).to(uint)])
+}
+
+fn crockford_value(ch: u8) u8 !Error {
+    if ch >= '0' && ch <= '9' : return ch - '0'
+    let upper = (ch >= 'a' && ch <= 'z') ? (ch - 'a' + 'A') : ch
+    if upper >= 'A' && upper <= 'H' : return upper - 'A' + 10
+    if upper == 'J' : return 18
+    if upper == 'K' : return 19
+    if upper == 'M' : return 20
+    if upper == 'N' : return 21
+    if upper >= 'P' && upper <= 'T' : return upper - 'P' + 22
+    if upper >= 'V' && upper <= 'Z' : return upper - 'V' + 27
+    throw .syntax { message: "'" + ch.to_ascii_string() + "' is not valid Crockford Base32" }
+}
