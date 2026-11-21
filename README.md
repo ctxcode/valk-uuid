@@ -5,7 +5,7 @@ UUIDs and ULIDs for [Valk](https://valk-lang.dev): random (version 4), time-orde
 name-based (version 5 and 3) UUIDs, monotonic Crockford Base32 ULIDs, and native `valk.json`
 serialization. Purely written in Valk, with no os-package dependencies.
 
-Requires Valk 0.8.10 or newer.
+Requires Valk 0.9.1 or newer.
 
 ## Install
 

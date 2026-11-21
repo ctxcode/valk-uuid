@@ -7,13 +7,6 @@ Namespaces: [main](#main)
 
 # main
 
-## Errors for 'main'
-
-```js
-// Thrown when text or bytes cannot be read as a UUID or ULID.
-+ error Error (syntax, length) payload { message: String }
-```
-
 ## Functions for 'main'
 
 ```js
@@ -50,6 +43,17 @@ Namespaces: [main](#main)
 ```
 
 ## Classes for 'main'
+
+```js
+// Thrown when text or bytes cannot be read as a UUID or ULID.
++ union Error {
+    syntax(String)
+    length(String)
+
+    + get message: String
+    + fn to_string() String
+}
+```
 
 ```js
 // The 16 bytes of a ULID (Universally Unique Lexicographically Sortable Identifier).

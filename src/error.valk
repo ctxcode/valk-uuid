@@ -1,7 +1,19 @@
 /// Thrown when text or bytes cannot be read as a UUID or ULID.
 ///
-/// - `syntax`: not a valid UUID (32 hex digits, with or without dashes, or `urn:uuid:`) or ULID (26 Crockford Base32 characters).
-/// - `length`: `from_bytes` got other than 16 bytes.
-+ error Error (syntax, length) payload {
-    message: String
+/// - `syntax(message)`: not a valid UUID (32 hex digits, with or without dashes, or `urn:uuid:`) or ULID (26 Crockford Base32 characters).
+/// - `length(message)`: `from_bytes` got other than 16 bytes.
++ union Error {
+    syntax(String)
+    length(String)
+
+    + get message: String {
+        return match this : String {
+            .syntax(msg) => msg
+            .length(msg) => msg
+        }
+    }
+
+    + fn to_string() String $auto {
+        return this.message
+    }
 }

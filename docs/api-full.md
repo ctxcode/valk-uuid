@@ -7,20 +7,6 @@ Namespaces: [main](#main)
 
 # main
 
-## Errors for 'main'
-
-```js
-// Thrown when text or bytes cannot be read as a UUID or ULID.
-+ error Error (syntax, length) payload { message: String }
-```
-
-### Error
-
-Thrown when text or bytes cannot be read as a UUID or ULID.
-
-- `syntax`: not a valid UUID (32 hex digits, with or without dashes, or `urn:uuid:`) or ULID (26 Crockford Base32 characters).
-- `length`: `from_bytes` got other than 16 bytes.
-
 ## Functions for 'main'
 
 ```js
@@ -148,6 +134,24 @@ it, the way version 4 ids do.
 Returns a time-ordered id as text.
 
 ## Classes for 'main'
+
+```js
+// Thrown when text or bytes cannot be read as a UUID or ULID.
++ union Error {
+    syntax(String)
+    length(String)
+
+    + get message: String
+    + fn to_string() String
+}
+```
+
+### Error
+
+Thrown when text or bytes cannot be read as a UUID or ULID.
+
+- `syntax(message)`: not a valid UUID (32 hex digits, with or without dashes, or `urn:uuid:`) or ULID (26 Crockford Base32 characters).
+- `length(message)`: `from_bytes` got other than 16 bytes.
 
 ```js
 // The 16 bytes of a ULID (Universally Unique Lexicographically Sortable Identifier).

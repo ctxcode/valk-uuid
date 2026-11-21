@@ -93,7 +93,7 @@ test "ULID parsing and validation" {
 
     let threw = false
     uuid.parse_ulid("80000000000000000000000000") ! {
-        assert(error_is(E.code, syntax))
+        assert(E is .syntax)
         threw = true
     }
     assert(threw)

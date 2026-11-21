@@ -197,16 +197,16 @@ global ulid_last_rand: [u8 x 10] ({ 0... })
 /// Throws `syntax` if the string is not 26 valid Crockford Base32 characters or overflows 128 bits.
 + fn parse_ulid(text: String) Ulid !Error {
     if text.length != 26 {
-        throw .syntax { message: "'" + text + "' is not a 26-character ULID" }
+        throw .syntax("'" + text + "' is not a 26-character ULID")
     }
     let v: [u8 x 26] = { 0... }
     let i: uint = 0
     while i < 26 {
-        v[i] = crockford_value(text[i]) ! throw .syntax { message: "'" + text + "' has a character that is not valid Crockford Base32" }
+        v[i] = crockford_value(text[i]) ! throw .syntax("'" + text + "' has a character that is not valid Crockford Base32")
         i++
     }
     if v[0] > 7 {
-        throw .syntax { message: "'" + text + "' overflows 128 bits" }
+        throw .syntax("'" + text + "' overflows 128 bits")
     }
 
     let id = Ulid.nil()
@@ -256,5 +256,5 @@ fn crockford_value(ch: u8) u8 !Error {
     if upper == 'N' : return 21
     if upper >= 'P' && upper <= 'T' : return upper - 'P' + 22
     if upper >= 'V' && upper <= 'Z' : return upper - 'V' + 27
-    throw .syntax { message: "'" + ch.to_ascii_string() + "' is not valid Crockford Base32" }
+    throw .syntax("'" + ch.to_ascii_string() + "' is not valid Crockford Base32")
 }

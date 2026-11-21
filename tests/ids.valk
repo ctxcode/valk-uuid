@@ -103,8 +103,9 @@ test "Reading and writing" {
     assert(!uuid.is_valid("zzzzzzzz-9dad-11d1-80b4-00c04fd430c8"))
     assert(uuid.is_valid(text))
     uuid.parse("nonsense") ! {
-        assert(error_is(E.code, syntax))
+        assert(E is .syntax)
         assert(E.message.contains("nonsense"))
+        assert(E.to_string() == E.message)
     }
 
     // The nil id
@@ -188,7 +189,7 @@ test "Nil, max and bytes" {
     let short: [u8 x 3] = { 1, 2, 3 }
     let threw = false
     uuid.from_bytes(&short) ! {
-        assert(error_is(E.code, length))
+        assert(E is .length)
         threw = true
     }
     assert(threw)
